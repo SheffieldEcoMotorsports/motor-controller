@@ -32,6 +32,7 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include "motor_control.h"
 
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
@@ -48,7 +49,8 @@ TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-bool Phase_1_High,Phase_1_Low, Phase_2_High, Phase_2_Low, Phase_3_High, Phase_3_Low, Hall_1, Hall_2, Hall_3;
+bool Phases[6]; //0 for Phase 1 High, 1 for Phase 1 Low, 2 for Phase 2 High, etc
+bool Halls[3]; // 0 for Hall 1, 1 for Hall 2, 2 for Hall 3
 
 const uint8_t BRIDGE_STEPS_FORWARD[8][6] =   // Motor step //A B C
 {
@@ -78,24 +80,13 @@ const uint8_t BRIDGE_STEPS_REVERSE[8][6] =   // Motor step //A B C
 };
 
 
-uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heartbeat_10ms = 0, led_state = 0, hallEffectTick = 0, diff = 0;
-uint16_t brakePedalVlaue_raw = 0, brakePedalVlaue_scaled = 0, accelPedalValue_scaled = 0, accelPedalValue_raw = 0;
+uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heartbeat_10ms = 0, led_state = 0, diff = 0;
+uint16_t brakePedalVlaue_scaled = 0, accelPedalValue_scaled = 0;
 uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1080, accelMax_in = 2895;
 uint16_t brakeRange = 0, accelRange = 0;
-uint16_t hallSpeed = 0, maxMotorSpeed = 3000;
 
-uint8_t systemState = 0, hallPosition = 0, lastHallPosition = 0;
-uint8_t  avgCurrent = 0, currentSum = 0, supplyVoltage = 24;
+uint8_t systemState = 0, hallPosition = 0;
 
-float Kp = 1;
-float Ki = 0.1;
-
-float motorSpeedConstant = 0.004; //volt per rpm
-float motorBrakeConstant = 0.001;
-
-int demandedSpeed = 0, measuredSpeed = 0, speedError = 0, speedErrorSum = 0, controlOutput = 0;
-
-bool pidEnabled = false;
 bool gearForward = true;
 bool deadManSwitch = true;
 /* USER CODE END PV */
@@ -112,7 +103,6 @@ static void MX_ADC2_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
-
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
@@ -122,76 +112,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
     globalHeartbeat_50us++;
-    //HAL_GPIO_TogglePin(GPIOD, LD3_Pin);
 }
 
-void LED_stateMachine (void) {
-    switch (systemState) {
-    case 0:
-      if ((globalHeartbeat_50us - led_state) > 20000) {
-        HAL_GPIO_TogglePin(GPIOD, LD4_Pin);
-        led_state = globalHeartbeat_50us;
-      }
-
-    	if (Hall_1)
-    		HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);
-    	else
-    		HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
-
-    	if (Hall_2)
-    		HAL_GPIO_WritePin(GPIOD, LD5_Pin, GPIO_PIN_SET);
-    	else
-    		HAL_GPIO_WritePin(GPIOD, LD5_Pin, GPIO_PIN_RESET);
-
-    	if (Hall_3)
-    		HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_SET);
-    	else
-    		HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);
-
-    break;
-
-    case 1: //hall effect problem
-      if ((globalHeartbeat_50us - led_state) > 10000) {
-        HAL_GPIO_WritePin(GPIOD, LD4_Pin,GPIO_PIN_RESET);
-
-    		//toggle hall effect LEDs
-    		HAL_GPIO_TogglePin(GPIOD, LD3_Pin);
-    		HAL_GPIO_TogglePin(GPIOD, LD5_Pin);
-    		HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
-
-    		led_state = globalHeartbeat_50us;
-    	}
-    break;
-
-    case 2 :
-      if ((globalHeartbeat_50us - led_state) > 10000) {
-        HAL_GPIO_WritePin(GPIOD, LD4_Pin,GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(GPIOD, LD3_Pin,GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(GPIOD, LD5_Pin,GPIO_PIN_RESET);
-
-        //toggle red LED
-        HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
-
-        led_state = globalHeartbeat_50us;
-      }
-    break;
-
-    case 99: //Dead Man
-      if ((globalHeartbeat_50us - led_state) > 5000) {
-        HAL_GPIO_WritePin(GPIOD, LD4_Pin,GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(GPIOD, LD3_Pin,GPIO_PIN_RESET);
-  		  HAL_GPIO_WritePin(GPIOD, LD6_Pin,GPIO_PIN_RESET);
-
-    		//toggle red LED
-    		HAL_GPIO_TogglePin(GPIOD, LD5_Pin);
-
-    		led_state = globalHeartbeat_50us;
-    	}
-    break;
-    }
-}
 
 /* USER CODE END 0 */
+
 
 int main(void)
 {
@@ -200,11 +125,9 @@ int main(void)
   //initialise counters
 
   //initialise mosfet states
-  Phase_1_High = false; Phase_1_Low = false;
-  Phase_2_High = false; Phase_2_Low = false;
-  Phase_3_High = false; Phase_3_Low = false;
-  Hall_1 = true; Hall_2 = true; Hall_3 = false;
-
+  initPhases(Phases);
+	initHalls(Halls);
+	
   brakeRange = (brakeMax_in - brakeMin_in);
   accelRange = (accelMax_in - accelMin_in);
 
@@ -232,27 +155,9 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);
 
 	HAL_TIM_Base_Start_IT(&htim1);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
+	startTimerPWM();
 
-
-	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_2);
-
-  //HAL_Delay(5000);
-  //Hall_1 = true; Hall_2 = true; Hall_3 = false;
-
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_Start(&hadc2);
-
-	Hall_1 = HAL_GPIO_ReadPin(GPIOD, Hall1_Pin);
-	Hall_2 = HAL_GPIO_ReadPin(GPIOD, Hall2_Pin);
-	Hall_3 = HAL_GPIO_ReadPin(GPIOD, Hall3_Pin);
-
-	hallPosition = (Hall_1<<2) + (Hall_2<<1) + (Hall_3);
-	lastHallPosition = hallPosition;
+	startADC_HALs();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -264,259 +169,63 @@ int main(void)
      diff = ~diff + 1;
 		}
 
-    if (diff > 2) {
+    if (diff > 2) { //100us stuff, commutation, calculate speed and position for control
       heartbeat_100us = globalHeartbeat_50us;
-			//100us stuff
-			//commutation
-			//calculate speed and position for control
+			
+			//Read Hall Sensors
+			readHallSensors(Halls);
+			getHallPosition(Halls, &hallPosition);
 
-
-      Hall_1 = HAL_GPIO_ReadPin(GPIOD, Hall1_Pin);
-      Hall_2 = HAL_GPIO_ReadPin(GPIOD, Hall2_Pin);
-      Hall_3 = HAL_GPIO_ReadPin(GPIOD, Hall3_Pin);
-
-
-      //compile hall effect values
-			hallPosition = (Hall_1<<2) + (Hall_2<<1) + (Hall_3);
-
-      //calcluate speed
-//      if (hallPosition != lastHallPosition) {
-//        hallSpeed = (int)((((float)1000000)/ (6*(globalHeartbeat_50us - hallEffectTick)*50))*60); //in RPM
-//        measuredSpeed = hallSpeed;
-//        hallEffectTick = globalHeartbeat_50us;
-//        lastHallPosition = hallPosition;
-//      }
-
-			if (!deadManSwitch) {
-				//person is dead :O !!
+			if (!deadManSwitch) //Check for dead man switch
+			{ 
 				systemState = 99;
-				TIM1->CCR1 = 0;
-				TIM1->CCR2 = 0;
-				TIM1->CCR3 = 0;
-				TIM1->CCR4 = 0;
-				TIM8->CCR1 = 0;
-				TIM8->CCR2 = 0;
-
-			} else if (brakePedalVlaue_scaled > 40) {
+				setNullDutyCiclePWM(); //No voltage to motor
+			} 
+			else if (brakePedalVlaue_scaled > 40) //If braking
+			{
         systemState = 0;
-	      //braking
-				TIM1->CCR1 = 0;
-				TIM1->CCR3 = 0;
-				TIM8->CCR1 = 0;
-
-        TIM1->CCR2 = brakePedalVlaue_scaled;
-        TIM1->CCR4 = brakePedalVlaue_scaled;
-				TIM8->CCR2 = brakePedalVlaue_scaled;
-
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-
-        HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1);
-        HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-
-			} else {
-        //systemState = 1;
-
-				// TIM1->CCR1 = 0;
-				// TIM1->CCR2 = 0;
-				// TIM1->CCR3 = 0;
-				// TIM1->CCR4 = 0;
-				// TIM8->CCR1 = 0;
-				// TIM8->CCR2 = 0;
-
-				if ((hallPosition <=6) && (hallPosition >=1)) {
+				setBrakingDutyCiclePWM(brakePedalVlaue_scaled);
+				startTimerPWM();
+			} 
+			else //No braking
+			{
+				if (!checkHallSensorMalfunction(hallPosition)) //Hall sensors work correctly
+				{
           systemState = 0;
-
+					
+					//Get phases given gear/hallPosition
 		      if (!gearForward){
-						Phase_1_High = BRIDGE_STEPS_REVERSE[hallPosition][0];
-						Phase_1_Low = BRIDGE_STEPS_REVERSE[hallPosition][1];
-
-						Phase_2_High = BRIDGE_STEPS_REVERSE[hallPosition][2];
-						Phase_2_Low = BRIDGE_STEPS_REVERSE[hallPosition][3];
-
-						Phase_3_High = BRIDGE_STEPS_REVERSE[hallPosition][4];
-						Phase_3_Low = BRIDGE_STEPS_REVERSE[hallPosition][5];
-
+						getPhasesReverse(Phases, hallPosition);
 					} else {
-						Phase_1_High = BRIDGE_STEPS_FORWARD[hallPosition][0];
-						Phase_1_Low = BRIDGE_STEPS_FORWARD[hallPosition][1];
-
-						Phase_2_High = BRIDGE_STEPS_FORWARD[hallPosition][2];
-						Phase_2_Low = BRIDGE_STEPS_FORWARD[hallPosition][3];
-
-						Phase_3_High = BRIDGE_STEPS_FORWARD[hallPosition][4];
-						Phase_3_Low = BRIDGE_STEPS_FORWARD[hallPosition][5];
+						getPhasesForward(Phases, hallPosition);
 					}
-
-					// HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
-					// HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
-					// HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
-					// HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_4);
-          //
-					// HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_1);
-					// HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_2);
-
-          if (pidEnabled) {
-
-            if (controlOutput >=0) {
-              TIM1->CCR1 = Phase_1_High *controlOutput;
-    					TIM1->CCR2 = Phase_1_Low *controlOutput;
-    					TIM1->CCR3 = Phase_2_High *controlOutput;
-    					TIM1->CCR4 = Phase_2_Low *controlOutput;
-    					TIM8->CCR1 = Phase_3_High *controlOutput;
-    					TIM8->CCR2 = Phase_3_Low *controlOutput;
-            } else {
-              TIM1->CCR1 = 0 * abs(controlOutput);
-    					TIM1->CCR2 = 1 *abs(controlOutput);
-    					TIM1->CCR3 = 0 *abs(controlOutput);
-    					TIM1->CCR4 = 1 *abs(controlOutput);
-    					TIM8->CCR1 = 0 *abs(controlOutput);
-    					TIM8->CCR2 = 1 *abs(controlOutput);
-            }
-          } else {
-  					TIM1->CCR1 = Phase_1_High *accelPedalValue_scaled;
-  					TIM1->CCR2 = Phase_1_Low *accelPedalValue_scaled;
-  					TIM1->CCR3 = Phase_2_High *accelPedalValue_scaled;
-  					TIM1->CCR4 = Phase_2_Low *accelPedalValue_scaled;
-  					TIM8->CCR1 = Phase_3_High *accelPedalValue_scaled;
-  					TIM8->CCR2 = Phase_3_Low *accelPedalValue_scaled;
-          }
-					// if (Phase_1_High) {
-          //   TIM1->CCR2 = 0;
-					//   TIM1->CCR1 = accelPedalValue_scaled;
-					// } else {
-					//   TIM1->CCR1 = 0;
-					//   TIM1->CCR2 = accelPedalValue_scaled;
-					// }
-          //
-					// if (Phase_2_High) {
-          //   TIM1->CCR4 = 0;
-          //   TIM1->CCR3 = accelPedalValue_scaled;
-					// } else {
-					//   TIM1->CCR3 = 0;
-					//   TIM1->CCR4 = accelPedalValue_scaled;
-					// }
-          //
-					// if (Phase_3_High) {
-          //   TIM8->CCR2 = 0;
-          //   TIM8->CCR1 = accelPedalValue_scaled;
-					// } else {
-					//   TIM8->CCR1 = 0;
-					//   TIM8->CCR2 = accelPedalValue_scaled;
-					// }
-
-					//HAL_TIM_Base_Start_IT(&htim1);
-
-					HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-					HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-					HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-					HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-
-					HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1);
-					HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-
-				} else {
-					//something is wrong with the hall sensors.. STOPPP
-
+					
+					setDutyCiclePWM(Phases, accelPedalValue_scaled); //Duty Cicle acording to pedal value
+					startTimerPWM();
+				} 
+				else //Hall sensors malfunction
+				{
 					systemState = 1;
-					HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
-					HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
-					HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
-					HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_4);
-
-					HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_1);
-					HAL_TIM_PWM_Stop(&htim8, TIM_CHANNEL_2);
+					stopTimerPWM(); //Stop timer
 				}
 			}
     }
-
-
-		diff = globalHeartbeat_50us -  heartbeat_1ms;
-		if (diff & 0x80000000) {
-			diff = ~diff + 1;
-		}
-
-		if (diff > 20) {
-  		heartbeat_1ms = globalHeartbeat_50us;
-  		//1ms stuff
-      speedError = demandedSpeed - measuredSpeed;
-
-      //controlOutput = (motorSpeedConstant*(speedError*Kp + speedErrorSum*Ki));
-
-      // if (controlOutput <= supplyVoltage) {
-      //   controlOutput = 4200*controlOutput/supplyVoltage;
-      // } else {
-      //   controlOutput = 4200;
-      // }
-
-      if (speedError >= 0) {
-        controlOutput = (motorSpeedConstant*(speedError*Kp + speedErrorSum*Ki));
-        if (controlOutput <= supplyVoltage) {
-          controlOutput = 4200*controlOutput/supplyVoltage;
-        } else {
-          controlOutput = 4200;
-        }
-      } else {
-        controlOutput = (motorBrakeConstant*(speedError*Kp + speedErrorSum*Ki));
-        if (abs(controlOutput) <= supplyVoltage) {
-          controlOutput = 4200*controlOutput/supplyVoltage;
-        } else {
-          controlOutput = -4200;
-        }
-      }
-
-      speedErrorSum += speedError;
-  		//speed regulator
-  		//over current protection
-
-  	}
 
 		diff = globalHeartbeat_50us -  heartbeat_10ms;
 		if (diff & 0x80000000) {
      diff = ~diff + 1;
 		}
-
+		
   	if (diff > 200) {
-      heartbeat_10ms = globalHeartbeat_50us;
-  		//10ms stuff
-  		//get pedal values
-
-  		brakePedalVlaue_raw = HAL_ADC_GetValue(&hadc2);
-			if (brakePedalVlaue_raw <= brakeMin_in)
-				brakePedalVlaue_scaled = 0;
-			else
-				brakePedalVlaue_scaled = (int)(4200*((float)(brakePedalVlaue_raw - brakeMin_in)/brakeRange));
-//
-//      if ((brakePedalVlaue_scaled<50)) {
-//        brakePedalVlaue_scaled = 0;
-//      }
-
-
-  		accelPedalValue_raw = HAL_ADC_GetValue(&hadc1);
-
-			if (accelPedalValue_raw <= accelMin_in) {
-				accelPedalValue_scaled = 0;
-        demandedSpeed = 0;
-			} else {
-				accelPedalValue_scaled = (int)(4200*((float)(accelPedalValue_raw-accelMin_in)/accelRange));
-        demandedSpeed = (int)(maxMotorSpeed*((float)(accelPedalValue_raw-accelMin_in)/accelRange));
-			}
-
-  		if (accelPedalValue_scaled<30) {
-  			accelPedalValue_scaled = 0;
-  		}
-
-  		gearForward = (bool)HAL_GPIO_ReadPin(Fw_Rev_switch_GPIO_Port, Fw_Rev_switch_Pin);
-
-  		HAL_ADC_Start(&hadc1);
-  		HAL_ADC_Start(&hadc2);
-  		//slew rate limiting for velocity (acceleration/deceleration control)
-			LED_stateMachine();
+      heartbeat_10ms = globalHeartbeat_50us; //10ms stuff, get pedal values
+			
+			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange);			
+			getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange);
+  		getGearForward(&gearForward);
+			
+			startADC_HALs();
+			LED_stateMachine(systemState, Halls);
   	}
-
-    //LED_stateMachine();
 
   /* USER CODE END WHILE */
 
