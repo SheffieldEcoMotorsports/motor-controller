@@ -476,21 +476,32 @@ void scaleSaturationInt(int* val, int min_val, int max_val){
 }
 
 /*
-	Description: applies PI velocity control.
+	Description: applies PI velocity control with anti-windup.
 
 	Input parameters:		int controlOutput - the PI control output will be stored here
 											int demandedSpeed - the target speed
 											int measuredSpeed - the measured speed (measured using hall sensors)
+											float actuatorSaturationPoint - contol output value from which the actuator is saturated
 											float speedErrorSum - the integral error of the PI. It is updated
 											float Kp - gain of the proportional error
 											float Ki - gain of the integral error
 	
 	Return value:		None
 */
-void getControlOutput(int* controlOutput, int demandedSpeed, int measuredSpeed, float* speedErrorSum, float Kp, float Ki){
+void getControlOutput(int* controlOutput, int demandedSpeed, int measuredSpeed, float actuatorSaturationPoint, 
+	float* speedErrorSum, float Kp, float Ki){
+	
 	int speedError = demandedSpeed - measuredSpeed; //error
   (*controlOutput) = speedError*Kp + (*speedErrorSum);
-	(*speedErrorSum) = (*speedErrorSum) + Ki*speedError;
+	
+	float windup = 0; //Compute the windup
+	if((*controlOutput) > actuatorSaturationPoint){ //If positively saturated
+		windup = actuatorSaturationPoint - (*controlOutput);
+	} else if ((*controlOutput) < (actuatorSaturationPoint * -1)){ //If negatively saturated
+		windup = (actuatorSaturationPoint * -1) - (*controlOutput);
+	}
+	
+	(*speedErrorSum) = (*speedErrorSum) + Ki*speedError + windup;
 }
 
 /*
@@ -503,7 +514,7 @@ void getControlOutput(int* controlOutput, int demandedSpeed, int measuredSpeed, 
 	Input parameters:		int demandedPWMdutyCicle - the PWM duty cicle will be stored here
 											int controlOutput - the output from the PID
 											float motorSpeedConstant - motor speed constant in V/RPM
-											uint8_t supplyVoltage - 
+											uint8_t supplyVoltage - voltage supplied to the motor when at full duty cicle
 	
 	Return value:		None
 */
@@ -512,4 +523,23 @@ void getDemandedPWM(int* demandedPWMdutyCicle, int controlOutput, float motorSpe
   scaleSaturationInt(demandedPWMdutyCicle, -4200, 4200); //Saturate between -maxDutyCicle and maxDutyCicle
 	
 	//If this is not work then it may be necesary to use a different motorSpeedConstant when braking and accelerationg
+}
+
+/*
+	Description: computes PI contol output value from which the actuator is saturated. The atuator is
+	saturated if the demanded PWM duty cicle exceeds the maximum duty cicle.
+
+	Input parameters:		float actuatorSaturationPoint - the actuator saturation point will be sotred here
+											int supplyVoltage - voltage supplied to the motor when at full duty cicle
+											float motorSpeedConstant - motor speed constant in V/RPM
+	
+	Return value:		None
+*/
+void getActuatorSaturationPoint(float* actuatorSaturationPoint, int supplyVoltage, float motorSpeedConstant){
+	// demandedPWMDutyCicle = MaxDutyCicle * motorConstant * ControlOutput / supplyVoltage
+	// At the saturation point demandedPWMDutyCicle = MaxDutyCicle, therefore the eq above turns into
+	// 1 = motorConstant * ControlOutput * supplyVoltage.
+	// Rearanging, the control output to achieve saturation is
+	// ControlOutput = supplyVoltage / motorConstant
+	(*actuatorSaturationPoint) = supplyVoltage / motorSpeedConstant;
 }
