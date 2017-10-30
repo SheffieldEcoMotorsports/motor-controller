@@ -89,6 +89,23 @@ uint8_t systemState = 0, hallPosition = 0;
 
 bool gearForward = true;
 bool deadManSwitch = true;
+
+// PID
+bool pidEnabled = false;
+float motorSpeedConstant = 0.004; //volt per rpm
+float motorBrakeConstant = 0.001;
+uint32_t hallEffectTick = 0; //Last hall position change (in us) - used to compute hall velocity
+uint8_t lastHallPosition; //Used to compute hall velocity
+uint8_t supplyVoltage = 24;
+int measuredSpeed = 0, demandedSpeed = 0, speedError = 0;
+int demandedPWM;
+int controlOutput;
+uint16_t maxMotorSpeed = 3000;
+float Kp = 1;
+float Ki = 0.1;
+float speedErrorSum = 0.0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -130,6 +147,10 @@ int main(void)
 	
   brakeRange = (brakeMax_in - brakeMin_in);
   accelRange = (accelMax_in - accelMin_in);
+	
+	//PID init
+	hallEffectTick = globalHeartbeat_50us;
+	lastHallPosition = hallPosition;
 
   /* USER CODE END 1 */
 
@@ -175,13 +196,16 @@ int main(void)
 			//Read Hall Sensors
 			readHallSensors(Halls);
 			getHallPosition(Halls, &hallPosition);
-
+			
+			if (hallPosition != lastHallPosition) { //Compute motor speed using hall sensors
+				computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
+			}
+			
 			if (!deadManSwitch) //Check for dead man switch
 			{ 
 				systemState = 99;
 				setNullDutyCiclePWM(); //No voltage to motor
-			} 
-			else if (brakePedalVlaue_scaled > 40) //If braking
+			} else if (brakePedalVlaue_scaled > 40) //If braking
 			{
         systemState = 0;
 				setBrakingDutyCiclePWM(brakePedalVlaue_scaled);
@@ -200,7 +224,16 @@ int main(void)
 						getPhasesForward(Phases, hallPosition);
 					}
 					
-					setDutyCiclePWM(Phases, accelPedalValue_scaled); //Duty Cicle acording to pedal value
+					if(pidEnabled){ // PID
+						if (demandedPWM >=0) { //Accelerate
+							setDutyCiclePWM(Phases, demandedPWM);
+						} else { //Decelerate
+							setBrakingDutyCiclePWM(abs(demandedPWM));
+						}
+					} else { //No PID
+						setDutyCiclePWM(Phases, accelPedalValue_scaled); //Duty Cicle acording to pedal value
+					}
+					
 					startTimerPWM();
 				} 
 				else //Hall sensors malfunction
@@ -210,10 +243,24 @@ int main(void)
 				}
 			}
     }
-
+		
+		diff = globalHeartbeat_50us -  heartbeat_1ms;
+		if (diff & 0x80000000) {
+			diff = ~diff + 1;
+		}
+		if (diff > 20) { //1ms stuff, get PID value
+  		heartbeat_1ms = globalHeartbeat_50us;
+			
+			//Apply PID
+			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, &speedErrorSum, Kp, Ki);
+			//Get the PWM duty cicle sing scalar control (volts per hz)
+			getDemandedPWM(&demandedPWM, controlOutput, motorSpeedConstant, supplyVoltage); 
+			
+		}
+		
 		diff = globalHeartbeat_50us -  heartbeat_10ms;
 		if (diff & 0x80000000) {
-     diff = ~diff + 1;
+     diff = ~diff + 1; 
 		}
 		
   	if (diff > 200) {
@@ -221,6 +268,7 @@ int main(void)
 			
 			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange);			
 			getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange);
+			getDamandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed);
   		getGearForward(&gearForward);
 			
 			startADC_HALs();
