@@ -296,7 +296,7 @@ void setNullDutyCiclePWM(){
 
 /*
 	Description: sets the duty cicle of all 6 PWM signals according to the computed phases.
-	The duty cicle is given by pedalValue (should be sclaed, that is, between 0 and 4200)
+	The duty cicle is given by dutyValue (should be sclaed, that is, between 0 and 4200)
 	
 	Input parameters: 	bool* Phases - array containing the 6 phases
 														Phases[0] = Phase 1 High
@@ -305,22 +305,22 @@ void setNullDutyCiclePWM(){
 														Phases[3] = Phase 2 Low
 														Phases[4] = Phase 2 High
 														Phases[5] = Phase 2 Low
-											int pedalValue - int containing the scaled pedal value (between 0 and 4200)
+											int dutyValue - int containing the desired duty cicle (between 0 and 4200)
 	
 	Return value: None
 */
-void setDutyCiclePWM(bool Phases[6], int pedalValue){
-	TIM1->CCR1 = Phases[0] * pedalValue; //Phase 1 High
-	TIM1->CCR2 = Phases[1] * pedalValue; //Phase 1 Low
-	TIM1->CCR3 = Phases[2] * pedalValue; //Phase 2 High
-	TIM1->CCR4 = Phases[3] * pedalValue; //Phase 2 Low
-	TIM8->CCR1 = Phases[4] * pedalValue; //Phase 3 High
-	TIM8->CCR2 = Phases[5] * pedalValue; //Phase 3 Low
+void setDutyCiclePWM(bool Phases[6], int dutyValue){
+	TIM1->CCR1 = Phases[0] * dutyValue; //Phase 1 High
+	TIM1->CCR2 = Phases[1] * dutyValue; //Phase 1 Low
+	TIM1->CCR3 = Phases[2] * dutyValue; //Phase 2 High
+	TIM1->CCR4 = Phases[3] * dutyValue; //Phase 2 Low
+	TIM8->CCR1 = Phases[4] * dutyValue; //Phase 3 High
+	TIM8->CCR2 = Phases[5] * dutyValue; //Phase 3 Low
 }
 
 /*
 	Description: sets the duty cicle of the 3 PWM signals going to the high phases to 0, and the 3 PWM
-	signals going to the low phases to pedalValue (should be sclaed, that is, between 0 and 4200)
+	signals going to the low phases to dutyValue (should be sclaed, that is, between 0 and 4200)
 	
 	Input parameters: 	bool* Phases - array containing the 6 phases
 														Phases[0] = Phase 1 High
@@ -329,17 +329,17 @@ void setDutyCiclePWM(bool Phases[6], int pedalValue){
 														Phases[3] = Phase 2 Low
 														Phases[4] = Phase 2 High
 														Phases[5] = Phase 2 Low
-											int pedalValue - int containing the scaled pedal value (between 0 and 4200)
+											int dutyValue - int containing the desired duty cicle (between 0 and 4200)
 	
 	Return value: None
 */
-void setBrakingDutyCiclePWM(int pedalValue){
+void setBrakingDutyCiclePWM(int dutyValue){
 	TIM1->CCR1 = 0; //Phase 1 High
 	TIM1->CCR3 = 0; //Phase 2 High
 	TIM8->CCR1 = 0; //Phase 3 High
-	TIM1->CCR2 = pedalValue; //Phase 1 Low
-	TIM1->CCR4 = pedalValue; //Phase 2 Low
-	TIM8->CCR2 = pedalValue; //Phase 3 Low
+	TIM1->CCR2 = dutyValue; //Phase 1 Low
+	TIM1->CCR4 = dutyValue; //Phase 2 Low
+	TIM8->CCR2 = dutyValue; //Phase 3 Low
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -405,4 +405,111 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3]) {
 				}
 				break;
 		}
+}
+
+//-------------------------------------------------------------------------------------------------
+// PID FUNCTIONS
+//-------------------------------------------------------------------------------------------------
+
+/*
+	Description: uses the time between two hall transitions to compute the motor speed in RPM
+	
+	Input parameters:		int measuredSpeed - the computed speed will be stored here
+											uint32_t globalHeartbeat_50us - contains the global 50us heartbeat
+											uint8_t hallPosition - contains the computed hall position
+											uint32_t hallEffectTick - contains the hearbeat of last hallEffect registered
+													change. Will be updated to the current heartbeat.
+											uint8_t lastHallPosition - will be update to the current hall position
+	
+	Return value:		None
+*/
+void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t hallPosition, 
+			uint32_t* hallEffectTick, uint8_t* lastHallPosition){
+	//Time between two transitions (ttr) in seconds:
+	//	ttr (us) = (globalHeartbeat_50us - hallEffectTick) * 50 (in us)
+	//	ttr  (s) = ((globalHeartbeat_50us - hallEffectTick) * 50) / 1000000 (in s)
+	//Electrical frequency (ef) = (1.0/6) / ttr (in Hz)
+	//  ef = 1.0 / (6*ttr)
+	//	ef = 1000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
+	//RPM = 60 * ef * n_pol_pairs
+	//  rpm = 180000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
+	//	rpm = 3600000 / (6 * (globalHeartbeat_50us - hallEffectTick))
+	//  rpm = 600000 / (globalHeartbeat_50us - hallEffectTick)
+	(*measuredSpeed) = (int) 600000.0 / (globalHeartbeat_50us - (*hallEffectTick));
+	(*hallEffectTick) = globalHeartbeat_50us;
+	(*lastHallPosition) = hallPosition;
+}
+
+
+/*
+	Description: computes the demanded speed (proportional to the scaled acceleration pedal value)
+	When the scaled pedal value = 1 (full press), then the demanded speed is the maximum motor speed
+	When the scaled pedal value = 0 (no press), then the demanded speed is 0
+	
+	Input parameters:		int demandedSpeed - the computed demanded speed will be stored here
+											int accelPedalValue_scaled - the scaled acceleration pedal value
+											int maxMotorSpeed - the maximum motor speed
+	
+	Return value:		None
+*/
+void getDamandedSpeed(int* demandedSpeed, int accelPedalValue_scaled, int maxMotorSpeed){
+	(*demandedSpeed) = accelPedalValue_scaled * maxMotorSpeed;
+}
+
+/*
+	Description: saturates an input value according to the input maximum and minimum
+	If the value is higher than the maximum, the value will be changed to the maximum
+	If the values is lower than the minimum, the value wll be changed to the minimum
+
+	Input parameters:		int val - the value to be saturated (and stored here)
+											int max_val - the maximum value
+											int min_val - the minimum value
+	
+	Return value:		None
+*/
+void scaleSaturationInt(int* val, int min_val, int max_val){
+	if((*val) > max_val){
+		(*val) = max_val;
+	} else if ((*val) < min_val){
+		(*val) = min_val;
+	}
+}
+
+/*
+	Description: applies PI velocity control.
+
+	Input parameters:		int controlOutput - the PI control output will be stored here
+											int demandedSpeed - the target speed
+											int measuredSpeed - the measured speed (measured using hall sensors)
+											float speedErrorSum - the integral error of the PI. It is updated
+											float Kp - gain of the proportional error
+											float Ki - gain of the integral error
+	
+	Return value:		None
+*/
+void getControlOutput(int* controlOutput, int demandedSpeed, int measuredSpeed, float* speedErrorSum, float Kp, float Ki){
+	int speedError = demandedSpeed - measuredSpeed; //error
+  (*controlOutput) = speedError*Kp + (*speedErrorSum);
+	(*speedErrorSum) = (*speedErrorSum) + Ki*speedError;
+}
+
+/*
+	Description: computes the PWM duty cicle for the motor controller according to the PID output
+	Voltage that should be supplied to the motor (V) = motorSpeedConstant (V/RPM) * controlOutput
+	PWM duty cicle = maximum duty cicle * voltage that should be supplied / supply voltage
+	The PWM duty cicle must be between -4200 and 4200. A negative duty cicle indicates that the PWM
+	phases used will be the braking phases. 
+
+	Input parameters:		int demandedPWMdutyCicle - the PWM duty cicle will be stored here
+											int controlOutput - the output from the PID
+											float motorSpeedConstant - motor speed constant in V/RPM
+											uint8_t supplyVoltage - 
+	
+	Return value:		None
+*/
+void getDemandedPWM(int* demandedPWMdutyCicle, int controlOutput, float motorSpeedConstant, uint8_t supplyVoltage){
+	(*demandedPWMdutyCicle) = 4200 * ((motorSpeedConstant * controlOutput) / supplyVoltage);
+  scaleSaturationInt(demandedPWMdutyCicle, -4200, 4200); //Saturate between -maxDutyCicle and maxDutyCicle
+	
+	//If this is not work then it may be necesary to use a different motorSpeedConstant when braking and accelerationg
 }
