@@ -151,6 +151,8 @@ int main(void)
 	//PID init
 	hallEffectTick = globalHeartbeat_50us;
 	lastHallPosition = hallPosition;
+	float actuatorSaturationPoint;
+	getActuatorSaturationPoint(&actuatorSaturationPoint, supplyVoltage, motorSpeedConstant);
 
   /* USER CODE END 1 */
 
@@ -251,8 +253,9 @@ int main(void)
 		if (diff > 20) { //1ms stuff, get PID value
   		heartbeat_1ms = globalHeartbeat_50us;
 			
-			//Apply PID
-			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, &speedErrorSum, Kp, Ki);
+			//Apply PID - with anti-windup
+			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, actuatorSaturationPoint, 
+				&speedErrorSum, Kp, Ki);
 			//Get the PWM duty cicle sing scalar control (volts per hz)
 			getDemandedPWM(&demandedPWM, controlOutput, motorSpeedConstant, supplyVoltage); 
 			
