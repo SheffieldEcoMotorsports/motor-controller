@@ -1,8 +1,32 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-extern const uint8_t BRIDGE_STEPS_FORWARD[8][6]; //Motor Phases for forward gear
-extern const uint8_t BRIDGE_STEPS_REVERSE[8][6]; //Motor Phases for reverse gear
+const uint8_t BRIDGE_STEPS_FORWARD[8][6] =   // Motor step //A B C
+{
+    { false,false   ,   false,false   ,  false,false },  // HighZ
+    { false,false   ,   false, true   ,  true, false },  // h 1, step 6
+    { false,true    ,   true ,false   ,  false,false },  // h 2, step 4
+    { false,true    ,   false,false   ,  true ,false },  // h 3, step 5
+    { true ,false   ,   false,false   ,  false,true  },  // h 4, step 2
+    { true ,false   ,   false,true    ,  false,false },  // h 5, step 1
+    { false,false   ,   true, false   ,  false,true  },  // h 6, step 3
+    { false,false   ,   false,false   ,  false,false },  // HighZ
+};
+
+const uint8_t BRIDGE_STEPS_REVERSE[8][6] =   // Motor step //A B C
+{
+    { false,false   ,   false,false   ,  false,false },  // HighZ
+
+    { false,false   ,   true ,false   ,  false, true },  // h 1, step 6
+    { true ,false   ,   false,true    ,  false,false },  // h 2, step 4
+    { true ,false   ,   false,false   ,  false,true  },  // h 3, step 5
+    { false,true    ,   false,false   ,  true ,false },  // h 4, step 2
+    { false,true    ,   true ,false   ,  false,false },  // h 5, step 1
+    { false,false   ,   false, true   ,  true ,false },  // h 6, step 3
+
+    { false,false   ,   false,false   ,  false,false },  // HighZ
+
+};
 
 extern TIM_HandleTypeDef htim1; //Timer for PWM gates 1,2,3,4
 extern TIM_HandleTypeDef htim8; //Timer for PWM gates 5,6
@@ -11,7 +35,7 @@ extern ADC_HandleTypeDef hadc1; //ADC for Acceleration Pedal
 extern ADC_HandleTypeDef hadc2; //ADC for Brake Pedal
 
 extern uint32_t globalHeartbeat_50us; //Main Global Heartbeat 
-extern uint32_t led_state; //To flash State Machine LED
+extern uint32_t hallLED_state; //To flash State Machine LED
 
 //-------------------------------------------------------------------------------------------------
 // FUNCTIONS FOR SAMPLING PEDALS AND FORWARD/REVERSE GEAR
@@ -354,12 +378,13 @@ void setBrakingDutyCiclePWM(int dutyValue){
 	
 	Return value:		None
 */
-void LED_stateMachine (uint8_t systemState, bool Halls[3]) {
+void LED_stateMachine (uint8_t systemState, bool Halls[3], uint32_t globalHeartbeat_50us, 
+	uint32_t hallLED_state) {
     switch (systemState) {
 			case 0: //Working normally
-				if ((globalHeartbeat_50us - led_state) > 20000) {
+				if ((globalHeartbeat_50us - hallLED_state) > 20000) {
 					HAL_GPIO_TogglePin(GPIOD, LD4_Pin);
-					led_state = globalHeartbeat_50us;
+					hallLED_state = globalHeartbeat_50us;
 				}
 
 				if (Halls[0])
@@ -380,7 +405,7 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3]) {
 				break;
 
 			case 1: //Hall effect problem
-				if ((globalHeartbeat_50us - led_state) > 10000) {
+				if ((globalHeartbeat_50us - hallLED_state) > 10000) {
 					HAL_GPIO_WritePin(GPIOD, LD4_Pin,GPIO_PIN_RESET);
 
 					//toggle hall effect LEDs
@@ -388,12 +413,12 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3]) {
 					HAL_GPIO_TogglePin(GPIOD, LD5_Pin);
 					HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
 
-					led_state = globalHeartbeat_50us;
+					hallLED_state = globalHeartbeat_50us;
 				}
 				break;
 
 			case 99: //Dead Man
-				if ((globalHeartbeat_50us - led_state) > 5000) {
+				if ((globalHeartbeat_50us - hallLED_state) > 5000) {
 					HAL_GPIO_WritePin(GPIOD, LD4_Pin,GPIO_PIN_RESET);
 					HAL_GPIO_WritePin(GPIOD, LD3_Pin,GPIO_PIN_RESET);
 					HAL_GPIO_WritePin(GPIOD, LD6_Pin,GPIO_PIN_RESET);
@@ -401,7 +426,7 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3]) {
 					//toggle red LED
 					HAL_GPIO_TogglePin(GPIOD, LD5_Pin);
 
-					led_state = globalHeartbeat_50us;
+					hallLED_state = globalHeartbeat_50us;
 				}
 				break;
 		}
