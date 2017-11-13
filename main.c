@@ -32,7 +32,6 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "motor_control.h"
-//#include "LookUpRPM.h"
 
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
