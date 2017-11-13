@@ -49,6 +49,12 @@ TIM_HandleTypeDef htim8;
 
 //Global heartbeats
 uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heartbeat_10ms = 0;
+int measuredSpeed = 0;
+int demandedSpeed = 0; //Keep track of motor measured/demanded speed
+int demandedPWM = 0; //Duty cycle proportional to the control 
+uint16_t accelPedalValue_scaled = 0;
+int controlOutput;
+int speedError = 0;
 
 /* USER CODE END PV */
 
@@ -95,7 +101,7 @@ int main(void)
 	float motorBrakeConstant = 0.001; // in volts per rpm
 	//float motorBrakeConstant = motorSpeedConstant; //Uncomment to see if brake constant impacts results
 	uint8_t supplyVoltage = 24; //in volts
-	uint16_t maxMotorSpeed = 3000; //in rpmm
+	uint16_t maxMotorSpeed = 12000; //in rpmm
 	
 	//PI variables
 	bool pidEnabled = false;
@@ -112,7 +118,8 @@ int main(void)
 	uint32_t hallLED_state = 0; //Used to display the hall sensor position using the STM LEDs
 	
 	//Variables to store the scaled acceleration and braking pedal values
-	uint16_t brakePedalVlaue_scaled = 0, accelPedalValue_scaled = 0;
+	uint16_t brakePedalVlaue_scaled = 0;
+	//uint16_t accelPedalValue_scaled = 0;
 	
 	
 	uint8_t systemState = 0; //Senses dead man switch / malfunctions
@@ -141,10 +148,10 @@ int main(void)
 																									// used to compute motor velocity
 	uint8_t lastHallPosition = hallPosition; //Last position of the hall sensors - used to compute motor velocity
 	
-	int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
+	//int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
 	float speedErrorSum = 0.0; //Integral of the speed error
-	int controlOutput; //PID output
-	int demandedPWM = 0; //Duty cycle proportional to the control output
+	//int controlOutput; //PID output
+	//int demandedPWM = 0; //Duty cycle proportional to the control output
 	
 	//Specifc for anti-windup (due to actuator saturation)
 	float actuatorSaturationPoint;
