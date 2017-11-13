@@ -31,12 +31,10 @@
   ******************************************************************************
   */
 /* Includes ------------------------------------------------------------------*/
-#include "stm32f4xx_hal.h"
 #include "motor_control.h"
+//#include "LookUpRPM.h"
 
 /* USER CODE BEGIN Includes */
-#include <stdbool.h>
-#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -91,11 +89,12 @@ int main(void)
 	//-------------------------------------------------------------------------------------------------
 	
 	//Minimum and maximum values from the acceleration and braking pedals
-	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1080, accelMax_in = 2895;
+	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1005, accelMax_in = 2875;
 	
 	//Motor characteristics
 	float motorSpeedConstant = 0.004; // in volts per rpm
-	//float motorBrakeConstant = 0.001; // in volts per rpm
+	float motorBrakeConstant = 0.001; // in volts per rpm
+	//float motorBrakeConstant = motorSpeedConstant; //Uncomment to see if brake constant impacts results
 	uint8_t supplyVoltage = 24; //in volts
 	uint16_t maxMotorSpeed = 3000; //in rpmm
 	
@@ -103,6 +102,7 @@ int main(void)
 	bool pidEnabled = false;
 	float Kp = 1;
 	float Ki = 0.1;
+	bool windupEnabled = false;
 	
 	
 	//-------------------------------------------------------------------------------------------------
@@ -252,9 +252,9 @@ int main(void)
 			
 			//Apply PID - with anti-windup
 			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, actuatorSaturationPoint, 
-				&speedErrorSum, Kp, Ki);
+				&speedErrorSum, Kp, Ki, windupEnabled);
 			//Get the PWM duty cicle sing scalar control (volts per hz)
-			getDemandedPWM(&demandedPWM, controlOutput, motorSpeedConstant, supplyVoltage); 
+			getDemandedPWM(&demandedPWM, controlOutput, motorSpeedConstant, motorBrakeConstant, supplyVoltage); 
 			
 		}
 		
@@ -268,7 +268,7 @@ int main(void)
 			
 			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange); //Read brake pedal
 			getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange); //Read accelearion pedal
-			getDamandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
+			getDemandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
 																																							 //from accel pedal info
   		getGearForward(&gearForward); //Sample gear forward/backward
 			
