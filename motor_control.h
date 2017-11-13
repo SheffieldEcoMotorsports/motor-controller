@@ -2,7 +2,6 @@
 #define _MOTOR_CONTROL_H_
 
 #include "stm32f4xx_hal.h"
-#include "LookUPRPM.h"
 #include <stdbool.h>
 #include <stdlib.h>
 
