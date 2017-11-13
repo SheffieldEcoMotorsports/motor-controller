@@ -2,6 +2,7 @@
 #define _MOTOR_CONTROL_H_
 
 #include "stm32f4xx_hal.h"
+#include "LookUPRPM.h"
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -45,11 +46,12 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3], uint32_t globalHeartb
 // PID FUNCTIONS
 void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t hallPosition, 
 			uint32_t* hallEffectTick, uint8_t* lastHallPosition);
-void getDamandedSpeed(int* demandedSpeed, int accelPedalValue_scaled, int maxMotorSpeed);
+void getDemandedSpeed(int* demandedSpeed, int accelPedalValue_scaled, int maxMotorSpeed);
 void scaleSaturationInt(int* val, int min_val, int max_val);
 void getControlOutput(int* controlOutput, int demandedSpeed, int measuredSpeed, float actuatorSaturationPoint, 
-	float* speedErrorSum, float Kp, float Ki);
-void getDemandedPWM(int* demandedPWMdutyCicle, int controlOutput, float motorSpeedConstant, uint8_t supplyVoltage);
+	float* speedErrorSum, float Kp, float Ki, bool windupEnabled);
+void getDemandedPWM(int* demandedPWMdutyCicle, int controlOutput, float motorSpeedConstant, 
+	float motorBrakeConstant, uint8_t supplyVoltage);
 void getActuatorSaturationPoint(float* actuatorSaturationPoint, int supplyVoltage, float motorSpeedConstant);
 
 #endif
