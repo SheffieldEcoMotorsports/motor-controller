@@ -3,8 +3,7 @@
 This version builds on top of the pid code by adding anti integral windup measures.
 
 Additions:
-  * Function to calculate the PI output that causes actuator saturation.
-  * Modified the PI function to account for anti integral windup.
-  * Does not use global variables (except the hearbeats).
+  * Added .c file for the header so that when debuggin in Keil the code can be recompiled
+  * Added motorBreakeConstant to the PI control, but put option to disable it when necesary
 
 Code developed by Sheffield Eco Motorsport Controls Team.
