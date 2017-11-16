@@ -451,7 +451,7 @@ void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t
 	//  rpm = 180000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
 	//	rpm = 3600000 / (6 * (globalHeartbeat_50us - hallEffectTick))
 	//  rpm = 600000 / (globalHeartbeat_50us - hallEffectTick)
-	(*measuredSpeed) = (int) (600000.0 / (globalHeartbeat_50us - (*hallEffectTick)));
+	(*measuredSpeed) = (int) 600000.0 / (globalHeartbeat_50us - (*hallEffectTick));
 	(*hallEffectTick) = globalHeartbeat_50us;
 	(*lastHallPosition) = hallPosition;
 }
