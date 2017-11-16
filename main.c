@@ -139,11 +139,11 @@ int main(void)
 	//PID
 	uint32_t hallEffectTick = globalHeartbeat_50us; //Time of last hall position change (in us)
 																									// used to compute motor velocity
-	uint8_t lastHallPosition = hallPosition; //Last position of the hall sensors - used to compute motor velocity
+	uint8_t lastHallPosition; //Last position of the hall sensors - used to compute motor velocity
 	
 	int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
 	float speedErrorSum = 0.0; //Integral of the speed error
-	int controlOutput; //PID output
+	int controlOutput = 0; //PID output
 	int demandedPWM = 0; //Duty cycle proportional to the control output
 	
 	//Specifc for anti-windup (due to actuator saturation)
@@ -177,7 +177,12 @@ int main(void)
 	startTimerPWM();
 
 	startADC_HALs();
-  /* USER CODE END 2 */
+	
+	//Initialize LastHallPosition for velocity measurement
+	readHallSensors(Halls);
+	getHallPosition(Halls, &lastHallPosition);
+
+/* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */

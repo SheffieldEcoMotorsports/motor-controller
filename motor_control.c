@@ -469,7 +469,7 @@ void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t
 	Return value:		None
 */
 void getDemandedSpeed(int* demandedSpeed, int accelPedalValue_scaled, int maxMotorSpeed){
-	(*demandedSpeed) = (accelPedalValue_scaled / 4200.0) * maxMotorSpeed;
+	(*demandedSpeed) = ((float) accelPedalValue_scaled / 4200) * maxMotorSpeed;
 }
 
 /*
