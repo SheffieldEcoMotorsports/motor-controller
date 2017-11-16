@@ -53,8 +53,9 @@ int measuredSpeed = 0;
 int demandedSpeed = 0; //Keep track of motor measured/demanded speed
 int demandedPWM = 0; //Duty cycle proportional to the control 
 uint16_t accelPedalValue_scaled = 0;
-int controlOutput;
+int controlOutput = 0;
 int speedError = 0;
+int encoder_changes = 0;
 
 /* USER CODE END PV */
 
@@ -146,7 +147,8 @@ int main(void)
 	//PID
 	uint32_t hallEffectTick = globalHeartbeat_50us; //Time of last hall position change (in us)
 																									// used to compute motor velocity
-	uint8_t lastHallPosition = hallPosition; //Last position of the hall sensors - used to compute motor velocity
+
+	uint8_t lastHallPosition; //Last position of the hall sensors - used to compute motor velocity
 	
 	//int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
 	float speedErrorSum = 0.0; //Integral of the speed error
@@ -188,6 +190,9 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	readHallSensors(Halls);
+	getHallPosition(Halls, &hallPosition);
+	lastHallPosition = hallPosition;
   while (1)
 	{
 		heartbeatDiff = globalHeartbeat_50us - heartbeat_100us;
@@ -203,7 +208,10 @@ int main(void)
 			getHallPosition(Halls, &hallPosition);
 			
 			if (hallPosition != lastHallPosition) { //Compute motor speed using hall sensors
-				computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
+				//computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
+				encoder_changes++;
+				//hallEffectTick = globalHeartbeat_50us;
+				lastHallPosition = hallPosition;
 			}
 			
 			if (!deadManSwitch) //Check for dead man switch
@@ -254,8 +262,10 @@ int main(void)
 			heartbeatDiff = ~heartbeatDiff + 1;
 		}
 		if (heartbeatDiff > 20) { //1ms stuff, get PID value
+			
   		heartbeat_1ms = globalHeartbeat_50us;
 			
+			speedError = demandedSpeed - measuredSpeed;
 			//Apply PID - with anti-windup
 			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, actuatorSaturationPoint, 
 				&speedErrorSum, Kp, Ki, windupEnabled);
@@ -269,11 +279,16 @@ int main(void)
      heartbeatDiff = ~heartbeatDiff + 1; 
 		}
 		
-  	if (heartbeatDiff > 200) {
+  	if (heartbeatDiff > 2000) {
       heartbeat_10ms = globalHeartbeat_50us; //10ms stuff, get pedal values
 			
+			//60 * encoder_changes / (time_interval * pulses per revolution)
+			measuredSpeed = ((float)(60 * encoder_changes)) / (1000 * 6);
+			encoder_changes = 0;
+			
 			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange); //Read brake pedal
-			getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange); //Read accelearion pedal
+			//getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange); //Read accelearion pedal
+			accelPedalValue_scaled = 2100;
 			getDemandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
 																																							 //from accel pedal info
   		getGearForward(&gearForward); //Sample gear forward/backward
