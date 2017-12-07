@@ -55,7 +55,10 @@ int demandedPWM = 0; //Duty cycle proportional to the control
 uint16_t accelPedalValue_scaled = 0;
 int controlOutput = 0;
 int speedError = 0;
-int encoder_changes = 0;
+int encoder_ticks = 0;
+int real_ticks = 0;
+int time_elapsed = 0;
+extern int test_profile_1Array[];
 
 /* USER CODE END PV */
 
@@ -95,20 +98,20 @@ int main(void)
 	//-------------------------------------------------------------------------------------------------
 	
 	//Minimum and maximum values from the acceleration and braking pedals
-	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1005, accelMax_in = 2875;
+	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1020, accelMax_in = 2875;
 	
 	//Motor characteristics
 	float motorSpeedConstant = 0.004; // in volts per rpm
 	float motorBrakeConstant = 0.001; // in volts per rpm
 	//float motorBrakeConstant = motorSpeedConstant; //Uncomment to see if brake constant impacts results
-	uint8_t supplyVoltage = 24; //in volts
-	uint16_t maxMotorSpeed = 12000; //in rpmm
+	uint8_t supplyVoltage = 12; //in volts
+	uint16_t maxMotorSpeed = 3000; //in rpmm
 	
 	//PI variables
-	bool pidEnabled = false;
-	float Kp = 1;
-	float Ki = 0.1;
-	bool windupEnabled = false;
+	bool pidEnabled = true;
+	float Kp = 1.125;
+	float Ki = 0.001;
+	bool windupEnabled = true;
 	
 	
 	//-------------------------------------------------------------------------------------------------
@@ -207,12 +210,16 @@ int main(void)
 			readHallSensors(Halls);
 			getHallPosition(Halls, &hallPosition);
 			
+			//encoder_ticks += getEncoderChanges(lastHallPosition, hallPosition);
+			//lastHallPosition = hallPosition;
 			if (hallPosition != lastHallPosition) { //Compute motor speed using hall sensors
 				//computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
-				encoder_changes++;
+				
+				encoder_ticks++;
 				//hallEffectTick = globalHeartbeat_50us;
 				lastHallPosition = hallPosition;
 			}
+			
 			
 			if (!deadManSwitch) //Check for dead man switch
 			{ 
@@ -282,16 +289,21 @@ int main(void)
   	if (heartbeatDiff > 2000) {
       heartbeat_10ms = globalHeartbeat_50us; //10ms stuff, get pedal values
 			
-			//60 * encoder_changes / (time_interval * pulses per revolution)
-			measuredSpeed = ((float)(60 * encoder_changes)) / (1000 * 6);
-			encoder_changes = 0;
+			//60 * encoder_ticks / (time_interval * pulses per revolution)
+			real_ticks = encoder_ticks;
+			measuredSpeed = ((float)(100 * encoder_ticks));
+			encoder_ticks = 0;
 			
-			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange); //Read brake pedal
+			//getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange); //Read brake pedal
 			//getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange); //Read accelearion pedal
-			accelPedalValue_scaled = 2100;
-			getDemandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
+			//accelPedalValue_scaled = 2100; //2100
+			//getDemandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
 																																							 //from accel pedal info
+			demandedSpeed = test_profile_1Array[time_elapsed];
+			time_elapsed += 10;
+			
   		getGearForward(&gearForward); //Sample gear forward/backward
+			//demandedSpeed = 2000;
 			
 			startADC_HALs();
 			LED_stateMachine(systemState, Halls, globalHeartbeat_50us, hallLED_state);
