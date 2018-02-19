@@ -53,7 +53,6 @@ int measuredSpeed = 0, demandedSpeed = 0, speedError = 0;
 int demandedPWM = 0, controlOutput = 0; //Duty cycle proportional to the control 
 uint16_t accelPedalValue_scaled = 0;
 int encoder_ticks = 0;
-int real_ticks = 0;
 
 /* USER CODE END PV */
 
@@ -285,7 +284,6 @@ int main(void)
       heartbeat_10ms = globalHeartbeat_50us; //10ms stuff, get pedal values
 			
 			//60 * encoder_ticks / (time_interval * pulses per revolution)
-			real_ticks = encoder_ticks;
 			measuredSpeed = ((float)(100 * encoder_ticks));
 			encoder_ticks = 0;
 			
