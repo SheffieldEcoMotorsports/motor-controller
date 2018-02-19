@@ -53,4 +53,6 @@ void getDemandedPWM(int* demandedPWMdutyCicle, int controlOutput, float motorSpe
 	float motorBrakeConstant, uint8_t supplyVoltage);
 void getActuatorSaturationPoint(float* actuatorSaturationPoint, int supplyVoltage, float motorSpeedConstant);
 
+int getEncoderChanges(uint8_t lastHallPosition, uint8_t hallPosition);
+
 #endif

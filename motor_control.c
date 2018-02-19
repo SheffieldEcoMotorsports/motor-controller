@@ -7,8 +7,8 @@ const uint8_t BRIDGE_STEPS_FORWARD[8][6] =   // Motor step //A B C
     { false,false   ,   false, true   ,  true, false },  // h 1, step 6
     { false,true    ,   true ,false   ,  false,false },  // h 2, step 4
     { false,true    ,   false,false   ,  true ,false },  // h 3, step 5
-    { true ,false   ,   false,false   ,  false,true  },  // h 4, step 2
-    { true ,false   ,   false,true    ,  false,false },  // h 5, step 1
+    { true ,false   ,   false,false   ,  false,true  },  // h 4, step 2 -
+    { true ,false   ,   false,true    ,  false,false },  // h 5, step 1 -
     { false,false   ,   true, false   ,  false,true  },  // h 6, step 3
     { false,false   ,   false,false   ,  false,false },  // HighZ
 };
@@ -26,6 +26,32 @@ const uint8_t BRIDGE_STEPS_REVERSE[8][6] =   // Motor step //A B C
 
     { false,false   ,   false,false   ,  false,false },  // HighZ
 
+};
+
+//const uint8_t ENCODER_CHANGES[8][8] = 
+//{
+//	//  1  2  3  4  5  6
+//	{0, 0, 0, 0, 0, 0, 0, 0},
+//	{0, 0, 2, 1, 2, 1, 3, 0}, // 1
+//	{0, 2, 0, 1, 2, 3, 1, 0}, // 2
+//	{0, 1, 1, 0, 3, 2, 2, 0}, // 3
+//	{0, 2, 2, 3, 0, 1, 1, 0}, // 4
+//	{0, 1, 3, 2, 1, 0, 2, 0}, // 5
+//	{0, 3, 1, 2, 1, 1, 0, 0}, // 6
+//	{0, 0, 0, 0, 0, 0, 0, 0},
+//};
+
+const uint8_t ENCODER_CHANGES[8][8] = 
+{
+	//  1  2  3  4  5  6
+	{0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 4, 5, 2, 1, 3, 0}, // 1
+	{0, 2, 0, 1, 4, 3, 5, 0}, // 2
+	{0, 1, 5, 0, 3, 2, 4, 0}, // 3
+	{0, 4, 2, 3, 0, 5, 1, 0}, // 4
+	{0, 5, 3, 4, 1, 0, 2, 0}, // 5
+	{0, 3, 1, 2, 5, 4, 0, 0}, // 6
+	{0, 0, 0, 0, 0, 0, 0, 0},
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -451,7 +477,8 @@ void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t
 	//  rpm = 180000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
 	//	rpm = 3600000 / (6 * (globalHeartbeat_50us - hallEffectTick))
 	//  rpm = 600000 / (globalHeartbeat_50us - hallEffectTick)
-	(*measuredSpeed) = (int) 600000.0 / (globalHeartbeat_50us - (*hallEffectTick));
+	//(*measuredSpeed) = (int) (600000.0 / (globalHeartbeat_50us - (*hallEffectTick)));
+	(*measuredSpeed) = ((float) (getEncoderChanges(*lastHallPosition, hallPosition) * 200000)) / (globalHeartbeat_50us - (*hallEffectTick));
 	(*hallEffectTick) = globalHeartbeat_50us;
 	(*lastHallPosition) = hallPosition;
 }
@@ -568,3 +595,7 @@ void getActuatorSaturationPoint(float* actuatorSaturationPoint, int supplyVoltag
 	// ControlOutput = supplyVoltage / motorConstant
 	(*actuatorSaturationPoint) = supplyVoltage / motorSpeedConstant;
 }
+
+int getEncoderChanges(uint8_t lastHallPosition, uint8_t hallPosition){
+	return ENCODER_CHANGES[lastHallPosition][hallPosition];
+}	
