@@ -50,7 +50,7 @@ TIM_HandleTypeDef htim8;
 //Global heartbeats
 uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heartbeat_10ms = 0;
 int measuredSpeed = 0, demandedSpeed = 0, int speedError = 0;
-int emandedPWM = 0; //Duty cycle proportional to the control 
+int demandedPWM = 0; //Duty cycle proportional to the control 
 uint16_t accelPedalValue_scaled = 0;
 int controlOutput = 0;
 int speedError = 0;
