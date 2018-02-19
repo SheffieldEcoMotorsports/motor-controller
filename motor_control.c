@@ -429,37 +429,6 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3], uint32_t globalHeartb
 //-------------------------------------------------------------------------------------------------
 
 /*
-	Description: uses the time between two hall transitions to compute the motor speed in RPM
-	
-	Input parameters:		int measuredSpeed - the computed speed will be stored here
-											uint32_t globalHeartbeat_50us - contains the global 50us heartbeat
-											uint8_t hallPosition - contains the computed hall position
-											uint32_t hallEffectTick - contains the hearbeat of last hallEffect registered
-													change. Will be updated to the current heartbeat.
-											uint8_t lastHallPosition - will be update to the current hall position
-	
-	Return value:		None
-*/
-void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t hallPosition, 
-			uint32_t* hallEffectTick, uint8_t* lastHallPosition){
-	//Time between two transitions (ttr) in seconds:
-	//	ttr (us) = (globalHeartbeat_50us - hallEffectTick) * 50 (in us)
-	//	ttr  (s) = ((globalHeartbeat_50us - hallEffectTick) * 50) / 1000000 (in s)
-	//Electrical frequency (ef) = (1.0/6) / ttr (in Hz)
-	//  ef = 1.0 / (6*ttr)
-	//	ef = 1000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
-	//RPM = 60 * ef * n_pol_pairs
-	//  rpm = 180000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
-	//	rpm = 3600000 / (6 * (globalHeartbeat_50us - hallEffectTick))
-	//  rpm = 600000 / (globalHeartbeat_50us - hallEffectTick)
-	//(*measuredSpeed) = (int) (600000.0 / (globalHeartbeat_50us - (*hallEffectTick)));
-	(*measuredSpeed) = ((float) (getEncoderChanges(*lastHallPosition, hallPosition) * 200000)) / (globalHeartbeat_50us - (*hallEffectTick));
-	(*hallEffectTick) = globalHeartbeat_50us;
-	(*lastHallPosition) = hallPosition;
-}
-
-
-/*
 	Description: computes the demanded speed (proportional to the scaled acceleration pedal value)
 	When the scaled pedal value = 1 (full press), then the demanded speed is the maximum motor speed
 	When the scaled pedal value = 0 (no press), then the demanded speed is 0
