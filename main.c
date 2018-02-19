@@ -49,6 +49,9 @@ TIM_HandleTypeDef htim8;
 
 //Global heartbeats
 uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heartbeat_10ms = 0;
+int measuredSpeed = 0, demandedSpeed = 0, speedError = 0;
+int demandedPWM = 0, controlOutput = 0; //Duty cycle proportional to the control 
+uint16_t accelPedalValue_scaled = 0;
 
 /* USER CODE END PV */
 
@@ -88,20 +91,20 @@ int main(void)
 	//-------------------------------------------------------------------------------------------------
 	
 	//Minimum and maximum values from the acceleration and braking pedals
-	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1005, accelMax_in = 2875;
+	uint16_t brakeMin_in = 1080, brakeMax_in = 2895, accelMin_in = 1020, accelMax_in = 2875;
 	
 	//Motor characteristics
 	float motorSpeedConstant = 0.004; // in volts per rpm
 	float motorBrakeConstant = 0.001; // in volts per rpm
 	//float motorBrakeConstant = motorSpeedConstant; //Uncomment to see if brake constant impacts results
-	uint8_t supplyVoltage = 24; //in volts
+	uint8_t supplyVoltage = 12; //in volts
 	uint16_t maxMotorSpeed = 3000; //in rpmm
 	
 	//PI variables
 	bool pidEnabled = false;
-	float Kp = 1;
-	float Ki = 0.1;
-	bool windupEnabled = false;
+	float Kp = 1.125;
+	float Ki = 0.001;
+	bool windupEnabled = true;
 	
 	
 	//-------------------------------------------------------------------------------------------------
@@ -112,7 +115,8 @@ int main(void)
 	uint32_t hallLED_state = 0; //Used to display the hall sensor position using the STM LEDs
 	
 	//Variables to store the scaled acceleration and braking pedal values
-	uint16_t brakePedalVlaue_scaled = 0, accelPedalValue_scaled = 0;
+	uint16_t brakePedalVlaue_scaled = 0;
+	//uint16_t accelPedalValue_scaled = 0;
 	
 	
 	uint8_t systemState = 0; //Senses dead man switch / malfunctions
@@ -133,18 +137,20 @@ int main(void)
 	initHalls(Halls);
 	
 	//Pedal ranges
-  uint16_t brakeRange = (brakeMax_in - brakeMin_in);
-  uint16_t accelRange = (accelMax_in - accelMin_in);
+  	uint16_t brakeRange = (brakeMax_in - brakeMin_in);
+  	uint16_t accelRange = (accelMax_in - accelMin_in);
 
 	//PID
 	uint32_t hallEffectTick = globalHeartbeat_50us; //Time of last hall position change (in us)
 																									// used to compute motor velocity
+
 	uint8_t lastHallPosition; //Last position of the hall sensors - used to compute motor velocity
+	int encoder_ticks = 0;
 	
-	int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
+	//int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
 	float speedErrorSum = 0.0; //Integral of the speed error
-	int controlOutput = 0; //PID output
-	int demandedPWM = 0; //Duty cycle proportional to the control output
+	//int controlOutput; //PID output
+	//int demandedPWM = 0; //Duty cycle proportional to the control output
 	
 	//Specifc for anti-windup (due to actuator saturation)
 	float actuatorSaturationPoint;
@@ -177,15 +183,13 @@ int main(void)
 	startTimerPWM();
 
 	startADC_HALs();
-	
-	//Initialize LastHallPosition for velocity measurement
-	readHallSensors(Halls);
-	getHallPosition(Halls, &lastHallPosition);
-
-/* USER CODE END 2 */
+  /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	readHallSensors(Halls);
+	getHallPosition(Halls, &hallPosition);
+	lastHallPosition = hallPosition;
   while (1)
 	{
 		heartbeatDiff = globalHeartbeat_50us - heartbeat_100us;
@@ -200,9 +204,16 @@ int main(void)
 			readHallSensors(Halls);
 			getHallPosition(Halls, &hallPosition);
 			
+			//encoder_ticks += getEncoderChanges(lastHallPosition, hallPosition);
+			//lastHallPosition = hallPosition;
 			if (hallPosition != lastHallPosition) { //Compute motor speed using hall sensors
-				computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
+				//computeHallSpeed(&measuredSpeed, globalHeartbeat_50us, hallPosition, &hallEffectTick, &lastHallPosition);
+				
+				encoder_ticks++;
+				//hallEffectTick = globalHeartbeat_50us;
+				lastHallPosition = hallPosition;
 			}
+			
 			
 			if (!deadManSwitch) //Check for dead man switch
 			{ 
@@ -252,8 +263,10 @@ int main(void)
 			heartbeatDiff = ~heartbeatDiff + 1;
 		}
 		if (heartbeatDiff > 20) { //1ms stuff, get PID value
+			
   		heartbeat_1ms = globalHeartbeat_50us;
 			
+			speedError = demandedSpeed - measuredSpeed;
 			//Apply PID - with anti-windup
 			getControlOutput(&controlOutput, demandedSpeed, measuredSpeed, actuatorSaturationPoint, 
 				&speedErrorSum, Kp, Ki, windupEnabled);
@@ -267,14 +280,20 @@ int main(void)
      heartbeatDiff = ~heartbeatDiff + 1; 
 		}
 		
-  	if (heartbeatDiff > 200) {
+  	if (heartbeatDiff > 2000) {
       heartbeat_10ms = globalHeartbeat_50us; //10ms stuff, get pedal values
+			
+			//60 * encoder_ticks / (time_interval * pulses per revolution)
+			measuredSpeed = ((float)(100 * encoder_ticks));
+			encoder_ticks = 0;
 			
 			getScaledBrakeValue(&brakePedalVlaue_scaled, brakeMin_in, brakeRange); //Read brake pedal
 			getScaledAccelValue(&accelPedalValue_scaled, accelMin_in, accelRange); //Read accelearion pedal
+			//accelPedalValue_scaled = 2100; //2100
 			getDemandedSpeed(&demandedSpeed, accelPedalValue_scaled, maxMotorSpeed); //Get the demanded speed
 																																							 //from accel pedal info
   		getGearForward(&gearForward); //Sample gear forward/backward
+			demandedSpeed = 2000;
 			
 			startADC_HALs();
 			LED_stateMachine(systemState, Halls, globalHeartbeat_50us, hallLED_state);

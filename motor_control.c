@@ -7,8 +7,8 @@ const uint8_t BRIDGE_STEPS_FORWARD[8][6] =   // Motor step //A B C
     { false,false   ,   false, true   ,  true, false },  // h 1, step 6
     { false,true    ,   true ,false   ,  false,false },  // h 2, step 4
     { false,true    ,   false,false   ,  true ,false },  // h 3, step 5
-    { true ,false   ,   false,false   ,  false,true  },  // h 4, step 2
-    { true ,false   ,   false,true    ,  false,false },  // h 5, step 1
+    { true ,false   ,   false,false   ,  false,true  },  // h 4, step 2 -
+    { true ,false   ,   false,true    ,  false,false },  // h 5, step 1 -
     { false,false   ,   true, false   ,  false,true  },  // h 6, step 3
     { false,false   ,   false,false   ,  false,false },  // HighZ
 };
@@ -27,6 +27,7 @@ const uint8_t BRIDGE_STEPS_REVERSE[8][6] =   // Motor step //A B C
     { false,false   ,   false,false   ,  false,false },  // HighZ
 
 };
+
 
 //-------------------------------------------------------------------------------------------------
 // FUNCTIONS FOR SAMPLING PEDALS AND FORWARD/REVERSE GEAR
@@ -426,36 +427,6 @@ void LED_stateMachine (uint8_t systemState, bool Halls[3], uint32_t globalHeartb
 //-------------------------------------------------------------------------------------------------
 // PID FUNCTIONS
 //-------------------------------------------------------------------------------------------------
-
-/*
-	Description: uses the time between two hall transitions to compute the motor speed in RPM
-	
-	Input parameters:		int measuredSpeed - the computed speed will be stored here
-											uint32_t globalHeartbeat_50us - contains the global 50us heartbeat
-											uint8_t hallPosition - contains the computed hall position
-											uint32_t hallEffectTick - contains the hearbeat of last hallEffect registered
-													change. Will be updated to the current heartbeat.
-											uint8_t lastHallPosition - will be update to the current hall position
-	
-	Return value:		None
-*/
-void computeHallSpeed(int* measuredSpeed, uint32_t globalHeartbeat_50us, uint8_t hallPosition, 
-			uint32_t* hallEffectTick, uint8_t* lastHallPosition){
-	//Time between two transitions (ttr) in seconds:
-	//	ttr (us) = (globalHeartbeat_50us - hallEffectTick) * 50 (in us)
-	//	ttr  (s) = ((globalHeartbeat_50us - hallEffectTick) * 50) / 1000000 (in s)
-	//Electrical frequency (ef) = (1.0/6) / ttr (in Hz)
-	//  ef = 1.0 / (6*ttr)
-	//	ef = 1000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
-	//RPM = 60 * ef * n_pol_pairs
-	//  rpm = 180000000 / (6 * (globalHeartbeat_50us - hallEffectTick) * 50)
-	//	rpm = 3600000 / (6 * (globalHeartbeat_50us - hallEffectTick))
-	//  rpm = 600000 / (globalHeartbeat_50us - hallEffectTick)
-	(*measuredSpeed) = (int) 600000.0 / (globalHeartbeat_50us - (*hallEffectTick));
-	(*hallEffectTick) = globalHeartbeat_50us;
-	(*lastHallPosition) = hallPosition;
-}
-
 
 /*
 	Description: computes the demanded speed (proportional to the scaled acceleration pedal value)
