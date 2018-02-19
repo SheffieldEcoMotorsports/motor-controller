@@ -52,7 +52,6 @@ uint32_t globalHeartbeat_50us = 0, heartbeat_100us = 0, heartbeat_1ms = 0, heart
 int measuredSpeed = 0, demandedSpeed = 0, speedError = 0;
 int demandedPWM = 0, controlOutput = 0; //Duty cycle proportional to the control 
 uint16_t accelPedalValue_scaled = 0;
-int encoder_ticks = 0;
 
 /* USER CODE END PV */
 
@@ -138,14 +137,15 @@ int main(void)
 	initHalls(Halls);
 	
 	//Pedal ranges
-  uint16_t brakeRange = (brakeMax_in - brakeMin_in);
-  uint16_t accelRange = (accelMax_in - accelMin_in);
+  	uint16_t brakeRange = (brakeMax_in - brakeMin_in);
+  	uint16_t accelRange = (accelMax_in - accelMin_in);
 
 	//PID
 	uint32_t hallEffectTick = globalHeartbeat_50us; //Time of last hall position change (in us)
 																									// used to compute motor velocity
 
 	uint8_t lastHallPosition; //Last position of the hall sensors - used to compute motor velocity
+	int encoder_ticks = 0;
 	
 	//int measuredSpeed = 0, demandedSpeed = 0; //Keep track of motor measured/demanded speed
 	float speedErrorSum = 0.0; //Integral of the speed error
