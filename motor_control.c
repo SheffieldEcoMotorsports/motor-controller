@@ -539,7 +539,3 @@ void getActuatorSaturationPoint(float* actuatorSaturationPoint, int supplyVoltag
 	// ControlOutput = supplyVoltage / motorConstant
 	(*actuatorSaturationPoint) = supplyVoltage / motorSpeedConstant;
 }
-
-int getEncoderChanges(uint8_t lastHallPosition, uint8_t hallPosition){
-	return ENCODER_CHANGES[lastHallPosition][hallPosition];
-}	
