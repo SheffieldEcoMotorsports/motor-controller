@@ -3,7 +3,7 @@
 Software for an STM32F407GT Discovery Board acting as a motor controller for a brushless DC motor. The motor controller takes inputs from the acceleration and break pedals and outputs the corresponding PWM signals to drive the motor.
 
 - [Inputs and outputs](#inputs-and-outputs)
-- [Functionality](#Functionality)
+- [Functionality](#functionality)
 - [Improvements required](#improvements-required)
 
 Code devloped by Sheffield Eco Motorsports.
