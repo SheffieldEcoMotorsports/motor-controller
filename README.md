@@ -32,9 +32,9 @@ The program flow is structured by polling three sections of code at different fr
 
 Short-term improvements:
  * PID controller modifications:
-  * Tune PID to ensure relatively fast responses while not overshooting.
-  * Test if integral anti-windup measures work as expected.
-  * Sample PID at the same frequency as the speed measurement.
+   * Tune PID to ensure relatively fast responses while not overshooting.
+   * Test if integral anti-windup measures work as expected.
+   * Sample PID at the same frequency as the speed measurement.
  * Test that motor can start from all positions, and determine if fault is at a hardware level due to faulty wire conexions or the phase look-up table is partially incorrect.
 
 Long-term improvements:
